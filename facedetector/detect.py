@@ -7,24 +7,31 @@ import numpy as np
 import cv2
 import dlib
 
-#####################################################################################
+import argparse
 
+#####################################################################################
 #FACE DETECTION CLASS
 class FADetector():
     def __init__(self):
+        # classic method
         self.fa2 = dlib.get_frontal_face_detector()
-        self.fa3 = cv2.dnn.readNetFromCaffe("./model/deploy.prototxt.txt","./model/res10_300x300_ssd_iter_140000.caffemodel")
-        self.fa4 = dlib.cnn_face_detection_model_v1("./model/mmod_human_face_detector.dat")
+
+        # terrible cnn method
+        self.fa4 = dlib.cnn_face_detection_model_v1("/home/huynshen/models/mmod_human_face_detector.dat")
         self.thresh = 0.5
 
-    #DLIB SIMPLE LANDMARK DETECTION + CPU YOLO FACE DETECTION
+        # best performance while being light weight
+        self.fa3 = cv2.dnn.readNetFromCaffe("/home/huynshen/models/deploy.prototxt.txt","/home/huynshen/models/res10_300x300_ssd_iter_140000.caffemodel")
+
+    # uses fa3 which is the best I found so far
     def cv2dnn_facedetection(self,rgb,pad=20):
         h,w = rgb.shape[:2]
         blob = cv2.dnn.blobFromImage(cv2.resize(rgb,(300,300)),1.0,(300,300),(103.93,116.77,123.68))
         self.fa3.setInput(blob)
         detections = self.fa3.forward()
 
-        #get driver bounding box based on rightmost position
+        # gets right most bounding box on a face
+        # get driver bounding box based on rightmost position
         rightmost = -1
         for i in range(0,detections.shape[2]):
             confidence = detections[0,0,i,2]
@@ -36,14 +43,14 @@ class FADetector():
         if rightmost == -1: return
 
         # return output
-        print(f"top: {bbox.top()}")
-        print(f"bot: {bbox.bottom()}")
-        print(f"left: {bbox.left()}")
-        print(f"right: {bbox.right()}")
-        bounded_img = cv2.rectangle(rgb,(bbox.left(),bbox.top()), (bbox.right(),bbox.bottom()),[255,0,0],1)
+        print(f"top: {bbox.top()} | bot: {bbox.bottom()} | left: {bbox.left()} | right: {bbox.right()}")
+        bounded_img = cv2.rectangle(rgb.copy(),(bbox.left(),bbox.top()), (bbox.right(),bbox.bottom()),[255,0,0],1)
         cv2.imshow('Detection',cv2.cvtColor(bounded_img, cv2.COLOR_RGB2BGR))
+        cv2.waitKey(1)
 
-        return rgb[bbox.top():bbox.bottom(),bbox.left():bbox.right()]
+
+        data = {'top': bbox.top(), 'bottom': bbox.bottom(), 'left': bbox.left(), 'right': bbox.right()}
+        return data
 
     #CNN FACE DETECTION FROM DLIB
     def dlibcnn_facedetection(self,rgb,save=False):
@@ -64,8 +71,8 @@ def test_getface(fin, mode=''):
 
     #PERFORM FACE DETECTION
     st_time = time.time()
-    if mode == 'cv2dnn':
-        img = fa_detector.cv2dnn_facedetection(rgb)
+    if mode == 'cv2-dnn':
+        bbox = fa_detector.cv2dnn_facedetection(rgb)
     elif mode == 'yolo-cpu':
         img = fa_detector.yolo_facedetection(rgb)
     elif mode == 'dlib-cnn':
@@ -79,17 +86,8 @@ def test_getface(fin, mode=''):
 # if main function
 if __name__ == '__main__':
 
-    fin = sys.argv[1]
-    test_getface(fin,mode='cv2dnn')
-
-
-
-
-
-
-
-
-
-
-
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--img", type=str, help='image to read in')
+    parser.add_argument("--mode", default='cv2-dnn', type=str, help='face detection method to use')
+    args = parser.parse_args()
+    test_getface(args.img,mode=args.mode)
